@@ -1,0 +1,73 @@
+# On a v* tag: point the Homebrew formula at that tag's source tarball, commit it
+# to main, then install the formula from source on macOS and run its test.
+#
+# To release: bump `version` in app/Cargo.toml, commit, then
+#   git tag v0.2.0 && git push origin main v0.2.0
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+# Explicit bash adds -o pipefail, so a failed curl can't produce a bogus sha256.
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  formula:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Check the tag matches app/Cargo.toml
+        run: |
+          want="${GITHUB_REF_NAME#v}"
+          have=$(git show "$GITHUB_REF_NAME:app/Cargo.toml" | sed -n 's/^version = "\(.*\)"/\1/p' | head -1)
+          if [ "$want" != "$have" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match version $have in app/Cargo.toml"
+            exit 1
+          fi
+
+      - name: Point the formula at this tag
+        run: |
+          url="https://github.com/$GITHUB_REPOSITORY/archive/refs/tags/$GITHUB_REF_NAME.tar.gz"
+          sha=$(curl -fsSL --retry 5 "$url" | sha256sum | cut -d' ' -f1)
+          sed -i -E \
+            -e "s|^  url \".*\"|  url \"$url\"|" \
+            -e "s|^  sha256 \".*\"|  sha256 \"$sha\"|" \
+            Formula/harness-bridge.rb
+          git diff Formula/harness-bridge.rb
+
+      - name: Commit to main
+        run: |
+          if git diff --quiet; then echo "Formula already up to date"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "harness-bridge $GITHUB_REF_NAME"
+          git push origin main
+
+  install-test:
+    needs: formula
+    runs-on: macos-latest
+    steps:
+      - name: Tap this repository
+        run: |
+          owner=$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
+          brew tap "$owner/harness-bridge" "https://github.com/$GITHUB_REPOSITORY"
+
+      - name: Install from source
+        run: brew install --build-from-source harness-bridge
+
+      - name: Test
+        run: brew test harness-bridge

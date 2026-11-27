@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Builds the bridge and registers the Native Messaging host with Chrome-family browsers.
+# For working on Harness Bridge from a source checkout. Users install with Homebrew instead.
+# Builds the app, registers the browser connection and puts `harness-bridge` on PATH.
 # Usage: scripts/install-host.sh [--release]
 set -euo pipefail
 
@@ -11,39 +12,9 @@ if [[ "${1:-}" == "--release" ]]; then PROFILE=release; CARGO_FLAGS=(--release);
 echo "→ building ($PROFILE)…"
 (cd "$ROOT/app" && cargo build ${CARGO_FLAGS[@]+"${CARGO_FLAGS[@]}"})
 
-HOST_BIN="$ROOT/app/target/$PROFILE/bridge-host"
-EXT_ID="$(cat "$ROOT/.dev/ext-id.txt" 2>/dev/null || true)"
-if [[ -z "$EXT_ID" ]]; then
-  echo "✕ .dev/ext-id.txt missing — it is derived from the key in extension/manifest.json" >&2
-  exit 1
-fi
-
-MANIFEST=$(cat <<EOF
-{
-  "name": "com.harness.bridge",
-  "description": "Harness Bridge native host",
-  "path": "$HOST_BIN",
-  "type": "stdio",
-  "allowed_origins": ["chrome-extension://$EXT_ID/"]
-}
-EOF
-)
-
-SUPPORT="$HOME/Library/Application Support"
-installed=0
-for dir in "Google/Chrome" "Google/Chrome Beta" "Google/Chrome Canary" "Chromium" \
-           "BraveSoftware/Brave-Browser" "Microsoft Edge" "Arc/User Data"; do
-  if [[ -d "$SUPPORT/$dir" ]]; then
-    mkdir -p "$SUPPORT/$dir/NativeMessagingHosts"
-    echo "$MANIFEST" > "$SUPPORT/$dir/NativeMessagingHosts/com.harness.bridge.json"
-    echo "✓ registered for $dir"
-    installed=1
-  fi
-done
-[[ $installed == 1 ]] || echo "✕ no Chrome-family browser profile found under $SUPPORT" >&2
+APP_BIN="$ROOT/app/target/$PROFILE/harness-bridge"
 
 # Put `harness-bridge` on PATH as a symlink to the built app.
-APP_BIN="$ROOT/app/target/$PROFILE/harness-bridge"
 LINK_DIR=""
 for d in /opt/homebrew/bin /usr/local/bin; do
   if [[ -d "$d" && -w "$d" ]]; then LINK_DIR="$d"; break; fi
@@ -58,9 +29,6 @@ case ":$PATH:" in
   *":$LINK_DIR:"*) ;;
   *) echo "  ! $LINK_DIR is not on your PATH; add it to ~/.zshrc: export PATH=\"$LINK_DIR:\$PATH\"" ;;
 esac
-
 echo
-echo "Extension ID : $EXT_ID"
-echo "Host binary  : $HOST_BIN"
-echo "Next: load $ROOT/extension as an unpacked extension, then start a session in your project:"
-echo "      cd ~/projects/my-app && harness-bridge ."
+
+"$APP_BIN" setup

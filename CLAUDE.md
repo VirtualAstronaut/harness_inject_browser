@@ -21,11 +21,21 @@ cd tests/extension && npm install && npm test
 node tests/extension/sites.test.mjs          # just the per-site adapter tests
 node tests/extension/flow.test.mjs           # just the full approval/result flow
 
-# Build + register native host for Chrome-family browsers + symlink `harness-bridge` onto PATH
+# Source checkout: build, symlink `harness-bridge` onto PATH, then run `harness-bridge setup`
 scripts/install-host.sh [--release]
+
+# Lint the Homebrew formula
+brew style Formula/harness-bridge.rb
 ```
 
-`install-host.sh` reads the extension ID from `.dev/ext-id.txt` (git-ignored, derived from the `key` in `extension/manifest.json`; the ID is `ckmjfebniegheoplafhgknkchhipjhmj`). After extension changes, reload the unpacked extension in `chrome://extensions`.
+After extension changes, reload the unpacked extension in `chrome://extensions`.
+
+## Distribution (Homebrew)
+
+- Users install with `brew tap virtualastronaut/harness-bridge https://github.com/VirtualAstronaut/harness_inject_browser && brew install harness-bridge`. The formula builds from source on purpose. Locally built programs aren't quarantined, so no Apple Developer ID or notarisation is needed. Don't switch to a cask or prebuilt binaries.
+- The formula moves `bridge-host` to `libexec/` and installs `extension/` and `prompts/` to `pkgshare`.
+- `harness-bridge setup` (`app/src/setup.rs`) writes the native host manifests into each browser's `~/Library/Application Support/<browser>/NativeMessagingHosts/`. Homebrew can't write there, so users run it once. It finds `bridge-host` at `../libexec/` (Homebrew) or as a sibling (source build). `stable_path` rewrites `Cellar/<name>/<version>/` to `opt/<name>/`, so the manifests survive `brew upgrade`. The extension ID is hardcoded as `EXTENSION_ID`; it's fixed by the `key` in `extension/manifest.json`.
+- Releases: bump `version` in `app/Cargo.toml`, then push a matching `v*` tag. `.github/workflows/release.yml` rewrites `url`/`sha256` in the formula, commits to `main`, then runs `brew install --build-from-source` and `brew test` on macOS. Don't hand-edit `url`/`sha256`.
 
 ## Architecture
 

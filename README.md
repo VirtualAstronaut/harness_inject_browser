@@ -33,9 +33,25 @@ chat window → extension → native host → menu-bar app
 
 ## Set up
 
-1. Run `scripts/install-host.sh`. This builds the app, registers it with Chrome, Brave, Edge and Chromium, and puts `harness-bridge` on your PATH.
-2. Open `chrome://extensions`. Turn on **Developer mode**. Click **Load unpacked** and choose the `extension/` folder. The extension ID should be `ckmjfebniegheoplafhgknkchhipjhmj`.
-3. Start the app in your project folder:
+You need macOS, [Homebrew](https://brew.sh) and a Chrome-family browser (Chrome, Brave, Edge, Chromium or Arc).
+
+1. Install with Homebrew:
+
+   ```sh
+   brew tap virtualastronaut/harness-bridge https://github.com/VirtualAstronaut/harness_inject_browser
+   brew install harness-bridge
+   ```
+
+   Homebrew builds the app on your Mac, so the first install takes a few minutes. Because it is built locally, macOS does not show an "app is not verified" warning.
+2. Connect your browsers to the app:
+
+   ```sh
+   harness-bridge setup
+   ```
+
+   It prints the extension folder to use in the next step.
+3. Open `chrome://extensions`. Turn on **Developer mode**. Click **Load unpacked** and choose the folder that `setup` printed. It is `$(brew --prefix)/opt/harness-bridge/share/harness-bridge/extension`.
+4. Start the app in your project folder:
 
    ```sh
    cd ~/projects/my-app
@@ -43,10 +59,12 @@ chat window → extension → native host → menu-bar app
    ```
 
    A `>_` icon appears in the menu bar. To stop, press Ctrl+C in the terminal.
-4. Open a new chat in Gemini, ChatGPT or Claude. A green dot in the bottom-right panel means the app is connected.
-5. Click **Add instructions** in the panel. Type your request below the instructions and press Send. Do this once per chat.
+5. Open a new chat in Gemini, ChatGPT or Claude. A green dot in the bottom-right panel means the app is connected.
+6. Click **Add instructions** in the panel. Type your request below the instructions and press Send. Do this once per chat.
 
 To keep the instructions in a Gemini Gem, a Custom GPT or a Claude Project, click **Copy instructions** and paste them there.
+
+To update, run `brew upgrade harness-bridge`. You don't need to run `setup` or reload the extension again.
 
 ## Use it
 
@@ -139,6 +157,8 @@ The model can also read, write and patch files.
 
 ## Develop
 
+To run from a source checkout instead of Homebrew, run `scripts/install-host.sh`. It builds the app, puts `harness-bridge` on your PATH and runs `setup`. Load the repo's `extension/` folder in Chrome.
+
 Run the Rust tests:
 
 ```sh
@@ -152,6 +172,18 @@ cd tests/extension && npm install && npm test
 ```
 
 To skip all prompts while developing, run `HARNESS_BRIDGE_AUTO_APPROVE=1 cargo run`. The menu bar shows a warning while it is on.
+
+### Release a new version
+
+1. Change `version` in `app/Cargo.toml` and commit.
+2. Tag and push:
+
+   ```sh
+   git tag v0.2.0
+   git push origin main v0.2.0
+   ```
+
+GitHub Actions then points `Formula/harness-bridge.rb` at the new tag, commits it to `main`, and test-installs it from source on macOS. The tag must match the version in `Cargo.toml`, or the release stops.
 
 ### Fix a site that stopped working
 

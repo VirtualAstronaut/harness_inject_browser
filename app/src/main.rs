@@ -32,6 +32,7 @@ mod files;
 mod policy;
 mod redact;
 mod sandbox;
+mod setup;
 mod trust;
 
 use files::FileRequest;
@@ -784,11 +785,15 @@ fn update_policy(f: impl FnOnce(&mut Policy)) {
 }
 
 const USAGE: &str = "usage: harness-bridge [FOLDER]
+       harness-bridge setup
 
 Starts the Harness Bridge menu-bar app. With FOLDER (for example `.`), that folder
 becomes the project: it is trusted (and remembered), and actions from the chat
 run there unless they name another folder. If Harness Bridge is already running,
-FOLDER is handed to it and this command exits.";
+FOLDER is handed to it and this command exits.
+
+`setup` registers the browser connection for Chrome, Brave, Edge, Chromium and Arc.
+Run it once after installing. (For a folder named setup, use `./setup`.)";
 
 /// Parse arguments; hand the folder to a running instance if there is one.
 /// Returns the project folder to start with.
@@ -797,6 +802,9 @@ fn cli() -> Option<PathBuf> {
     if args.iter().any(|a| a == "-h" || a == "--help") {
         println!("{USAGE}");
         std::process::exit(0);
+    }
+    if args.len() == 1 && args[0] == "setup" {
+        std::process::exit(setup::run(&home()));
     }
     if args.len() > 1 {
         eprintln!("{USAGE}");
