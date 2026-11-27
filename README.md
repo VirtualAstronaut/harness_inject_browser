@@ -18,19 +18,6 @@ chat window → extension → native host → menu-bar app
      └──────────── result ───────────────────┘
 ```
 
-## Parts
-
-| Part | Where | What it does |
-|---|---|---|
-| Menu-bar app | `app/src/main.rs` | Receives actions, checks them, runs them and logs them. |
-| Policy | `app/src/policy.rs` | Approval modes and danger rules. |
-| Trust | `app/src/trust.rs` | Trusted folders. |
-| Sandbox | `app/src/sandbox.rs`, `app/src/seatbelt_*.sbpl` | Sandbox profile. Base rules come from OpenAI Codex (Apache-2.0). |
-| File tools | `app/src/files.rs` | Read, write and patch files. |
-| Native host | `app/src/bin/bridge-host.rs` | Passes messages between the browser and the app. It never runs commands. |
-| Extension | `extension/` | Finds actions, shows the approval panel and sends results back. |
-| Instructions | `extension/protocol.md`, copied to `prompts/instructions.md` | Tells the model how to write actions. |
-
 ## Set up
 
 You need macOS, [Homebrew](https://brew.sh) and a Chrome-family browser (Chrome, Brave, Edge, Chromium or Arc).
@@ -65,6 +52,19 @@ You need macOS, [Homebrew](https://brew.sh) and a Chrome-family browser (Chrome,
 To keep the instructions in a Gemini Gem, a Custom GPT or a Claude Project, click **Copy instructions** and paste them there.
 
 To update, run `brew upgrade harness-bridge`. You don't need to run `setup` or reload the extension again.
+
+## Parts
+
+| Part | Where | What it does |
+|---|---|---|
+| Menu-bar app | `app/src/main.rs` | Receives actions, checks them, runs them and logs them. |
+| Policy | `app/src/policy.rs` | Approval modes and danger rules. |
+| Trust | `app/src/trust.rs` | Trusted folders. |
+| Sandbox | `app/src/sandbox.rs`, `app/src/seatbelt_*.sbpl` | Sandbox profile. Base rules come from OpenAI Codex (Apache-2.0). |
+| File tools | `app/src/files.rs` | Read, write and patch files. |
+| Native host | `app/src/bin/bridge-host.rs` | Passes messages between the browser and the app. It never runs commands. |
+| Extension | `extension/` | Finds actions, shows the approval panel and sends results back. |
+| Instructions | `extension/protocol.md`, copied to `prompts/instructions.md` | Tells the model how to write actions. |
 
 ## Use it
 
