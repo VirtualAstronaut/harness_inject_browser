@@ -146,30 +146,50 @@
   }
   const bridge = (payload) => send({ kind: 'bridge', payload });
 
+  // Messages in the status line. flash(): info or success that clears itself.
+  // warn(): a problem that stays until it's fixed or the user sends a message.
+  let noteTimer;
+  function flash(msg, kind = 'info', ms = 6000) {
+    clearTimeout(noteTimer);
+    state.note = msg;
+    state.noteKind = kind;
+    noteTimer = setTimeout(() => {
+      if (state.note === msg) {
+        state.note = '';
+        render();
+      }
+    }, ms);
+    render();
+  }
+  function warn(msg) {
+    clearTimeout(noteTimer);
+    state.note = msg;
+    state.noteKind = 'warn';
+    render();
+  }
+  function clearNote() {
+    clearTimeout(noteTimer);
+    state.note = '';
+  }
+
   async function ping() {
     const r = await bridge({ type: 'ping' });
     state.bridge = r.type === 'pong' && r.status !== 'error' ? 'ok' : 'down';
     if (state.bridge === 'ok') state.info = r;
-    state.note = state.bridge === 'ok' ? (r.auto_approve ? '⚠️ app auto-approve ON' : '') : r.error || '';
+    if (state.bridge === 'ok') clearNote(); // auto-approve shows as a chip
+    else {
+      state.note = r.error || '';
+      state.noteKind = 'warn';
+    }
     render();
   }
 
   // The Ping button: same check, but always shows that something happened, since a
   // green dot that stays green looks like nothing was done.
   async function pingClicked() {
-    state.note = 'Checking the connection…';
-    render();
+    flash('Checking the connection…');
     await ping();
-    if (state.bridge !== 'ok' || state.note) return;
-    const msg = `✓ Connected to Harness Bridge${state.info.version ? ` ${state.info.version}` : ''}`;
-    state.note = msg;
-    render();
-    setTimeout(() => {
-      if (state.note === msg) {
-        state.note = '';
-        render();
-      }
-    }, 4000);
+    if (state.bridge === 'ok') flash(`✓ Connected to Harness Bridge${state.info.version ? ` ${state.info.version}` : ''}`, 'ok', 4000);
   }
 
   // Re-read the app's settings and project without touching the note (the user may
@@ -390,7 +410,7 @@
         });
         if (choice === 'yes') {
           const t = await bridge({ type: 'trust', paths: r.paths || [] });
-          if (t.errors?.length) state.note = `Trust failed: ${t.errors.join('; ')}`;
+          if (t.errors?.length) warn(`Trust failed: ${t.errors.join('; ')}`);
         } else if (choice === 'once') payload.trust_once = true;
       } else if (r.status === 'needs_approval' && r.diff) {
         choice = await ask(b, {
@@ -420,7 +440,7 @@
         });
         if (choice === 'always') {
           const a = await bridge({ type: 'allow_always', kind: 'cmd', cmd: b.req.cmd });
-          if (a.rule) state.note = `Always allowed: ${a.rule}`;
+          if (a.rule) flash(`✓ Always allowed: ${a.rule}`, 'ok');
         }
         if (choice !== 'deny') payload.approved = true;
       } else if (r.sandbox_blocked && !payload.unsandboxed) {
@@ -542,13 +562,11 @@
     const input = $(SEL.input);
     if (!input || !(await putText(input, text, RESULT_MARK))) {
       await navigator.clipboard.writeText(text).catch(() => {});
-      state.note = 'Could not fill the chat box — results copied to clipboard, paste manually.';
-      render();
+      warn("Couldn't fill the chat box. Results are on your clipboard: paste them.");
       return;
     }
     if (state.settings.autoSend && !(await clickSend())) {
-      state.note = 'Send button not found/enabled — press Send yourself.';
-      render();
+      warn('Results are in the chat box. Press Send.');
     }
   }
 
@@ -566,13 +584,11 @@
     const input = $(SEL.input);
     const text = await getProtocol();
     if (!input || !text) {
-      state.note = !input ? 'Chat box not found.' : 'Instructions unavailable — reload the extension.';
-      return render();
+      return warn(!input ? 'Chat box not found.' : 'Instructions unavailable. Reload the extension.');
     }
     const current = (input.innerText || input.value || '').trim();
     if (current.includes(PROTOCOL_MARK)) {
-      state.note = 'Instructions are already in the chat box.';
-      return render();
+      return flash('Instructions are already in the chat box.');
     }
     // Tell the model which folder it's in, so it can leave out "cwd".
     await ping();
@@ -581,17 +597,17 @@
       : '';
     const block = `${text}${project}\n\n---\n\n`;
     const ok = await putText(input, current ? `${block}${current}` : block, PROTOCOL_MARK, { replace: true });
-    state.note = ok ? 'Instructions added to the chat box — type your request below them and press Send.' : 'Could not fill the chat box; use Copy and paste instead.';
-    render();
+    if (ok) flash('Instructions added. Type your request below them and press Send.', 'info', 12000);
+    else warn("Couldn't fill the chat box. Use Copy instructions and paste.");
   }
 
   async function copyInstructions() {
     const text = await getProtocol();
     try {
       await navigator.clipboard.writeText(text);
-      state.note = 'Instructions copied. The project folder is added to every result, so they work in any project.';
+      flash('✓ Instructions copied. They work in any project.', 'ok');
     } catch {
-      state.note = 'Copy failed; open prompts/instructions.md instead.';
+      warn('Copy failed. Open prompts/instructions.md instead.');
     }
     render();
   }
@@ -601,6 +617,7 @@
   // has finished, any block that wasn't in the snapshot (and hasn't run before) runs.
   let snapshot = new Set();
   function arm() {
+    clearNote(); // the user sent something: earlier messages have done their job
     state.armedAt = Date.now();
     state.sawGenerating = false;
     snapshot = new Set(allBlocks().map((b) => b.key));
@@ -701,28 +718,31 @@
        border-radius:14px;padding:10px 12px 12px;display:flex;flex-direction:column;gap:10px;box-sizing:border-box;
        width:min(320px,calc(100vw - 32px));overflow:auto;box-shadow:0 10px 30px #0009}
     .p.asking{border-color:#d9962b}
-    .p.min{gap:0;padding-bottom:10px}
-    .p.min .body{display:none}
-    .head{display:flex;align-items:center;gap:6px;cursor:grab;user-select:none}
-    .head.dragging{cursor:grabbing}
-    .dot{width:8px;height:8px;border-radius:50%;flex:none;margin-right:2px}
-    .name{font-weight:600;white-space:nowrap}
-    .status{color:#8b8f96;font-size:12px;margin-right:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .p.min > :not(.statusline){display:none}
+    .controls{display:flex;align-items:center;gap:4px;min-width:0}
+    .statusline{display:flex;align-items:center;gap:6px;font-size:12px;color:#8b8f96;cursor:grab;user-select:none;
+                border-top:1px solid #2c2e33;padding-top:8px;margin-top:-2px}
+    .p.min .statusline{border-top:0;padding-top:0;margin-top:0}
+    .statusline.dragging{cursor:grabbing}
+    .dot{width:8px;height:8px;border-radius:50%;flex:none}
+    .name{font-weight:600;color:#c9cdd3;white-space:nowrap}
+    .status{margin-right:auto;min-width:0}
     .icon{display:inline-flex;align-items:center;justify-content:center;flex:none;width:26px;height:26px;padding:0;
           border:0;border-radius:7px;background:transparent;color:#9da1a8}
     .icon:hover,.icon.on{background:#2c2e33;color:#fff}
+    .icon.primary{color:#9ecbff}
     .icon svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-    .body{display:flex;flex-direction:column;gap:10px}
-    .proj{display:flex;align-items:center;gap:6px;min-width:0}
-    .folder{font-weight:600;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-right:auto}
+    .proj{display:flex;align-items:center;gap:6px;min-width:0;flex:1;margin-right:4px}
+    .chips{display:flex;gap:4px;flex:none}
+    .folder{font-weight:600;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;margin-right:auto}
     .folder.none{font-weight:400;color:#8b8f96}
     .chip{font-size:11px;padding:1px 8px;border-radius:999px;background:#2a2c31;color:#a9adb4;white-space:nowrap;flex:none}
     .chip.warn{background:#4a2b12;color:#ffb366}
     button{font:inherit;cursor:pointer;background:#2a2c31;color:#e8e8e8;border:1px solid #3d4046;border-radius:8px;padding:5px 10px}
     button:hover{background:#34363c}
-    .note{font-size:12px;color:#f3b469}
+    .note.warn{color:#f3b469}
     .note.ok{color:#7ee787}
-    .note:empty{display:none}
+    .note.info{color:#c9cdd3}
     .menu{display:none;flex-direction:column;gap:8px;padding:10px;border-radius:10px;background:#232428}
     .menu.on{display:flex}
     label{display:flex;gap:8px;align-items:center;cursor:pointer;color:#d0d3d8;font-size:12px}
@@ -752,6 +772,7 @@
 
   // Small line icons, built node by node (no innerHTML: some chat sites enforce Trusted Types).
   const ICONS = {
+    add: ['M4 6h11', 'M4 12h11', 'M4 18h7', 'M18 15v6', 'M15 18h6'],
     refresh: ['M21 12a9 9 0 1 1-2.6-6.4', 'M21 4v5h-5'],
     copy: ['M9 9h11v11H9z', 'M5 15H4V4h11v1'],
     settings: ['M4 7h9', 'M17 7h3', 'M4 17h3', 'M11 17h9', 'M15 5v4', 'M9 15v4'],
@@ -877,9 +898,10 @@
         panel: el('div', { className: 'p' }),
         dot: el('span', { className: 'dot' }),
         status: el('span', { className: 'status' }),
+        name: el('span', { className: 'name', textContent: 'Harness Bridge', title: `Harness Bridge on ${SITE.name}` }),
         folder: el('span', { className: 'folder' }),
-        chips: el('span', { className: 'proj' }),
-        note: el('div', { className: 'note' }),
+        chips: el('span', { className: 'chips' }),
+        note: el('span', { className: 'note' }),
         diag: el('div', { className: 'diag' }),
         menu: el('div', { className: 'menu' }),
         autoRun: el('input', { type: 'checkbox' }),
@@ -910,11 +932,8 @@
         saveSettings();
         render();
       });
-      const addBtn = el('button', {
-        textContent: 'Add instructions',
-        title: 'Put the Harness Bridge instructions at the top of the chat box. Use it once, in the first message of a chat.',
-      });
-      addBtn.addEventListener('click', trusted(addInstructions));
+      const addBtn = iconButton('add', 'Add instructions', addInstructions, 'Add instructions to the chat box (once, in the first message of a chat)');
+      addBtn.classList.add('primary');
       pill.stop.addEventListener('click', trusted(() => state.running && bridge({ type: 'stop', id: state.running.id })));
 
       pill.menu.append(
@@ -925,24 +944,23 @@
       pill.live.append(pill.liveTitle, pill.liveOut, el('div', { className: 'actions' }, pill.stop));
       pill.card.append(pill.title, pill.body, pill.meta, pill.why, pill.actions);
 
-      const name = el('span', { className: 'name', textContent: 'Harness Bridge', title: `Harness Bridge on ${SITE.name}` });
-      const head = el(
-        'div',
-        { className: 'head', title: 'Drag to move' },
-        pill.dot,
-        name,
-        pill.status,
-        iconButton('refresh', 'Check connection', pingClicked),
-        iconButton('copy', 'Copy instructions', copyInstructions, 'Copy instructions, for a Gem, Custom GPT or Claude Project'),
-        menuBtn,
-        pill.minBtn,
-      );
-      makeDraggable(head);
+      // Bottom: one row of controls, then a status line (also the drag handle).
+      const statusline = el('div', { className: 'statusline', title: 'Drag to move · double-click to reset' }, pill.dot, pill.status, pill.minBtn);
+      makeDraggable(statusline);
       pill.panel.append(
-        head,
-        el('div', { className: 'body' }, el('div', { className: 'proj' }, pill.folder, pill.chips), pill.menu, addBtn, pill.note),
         pill.live,
         pill.card,
+        pill.menu,
+        el(
+          'div',
+          { className: 'controls' },
+          el('div', { className: 'proj' }, pill.folder, pill.chips),
+          addBtn,
+          iconButton('refresh', 'Check connection', pingClicked),
+          iconButton('copy', 'Copy instructions', copyInstructions, 'Copy instructions, for a Gem, Custom GPT or Claude Project'),
+          menuBtn,
+        ),
+        statusline,
       );
       root.append(el('style', { textContent: PANEL_CSS }), pill.panel);
       placePanel(); // now that the panel exists, also cap its height
@@ -950,7 +968,16 @@
 
     const i = state.info;
     pill.dot.style.background = { ok: '#4caf50', down: '#e53935', unknown: '#777' }[state.bridge];
-    pill.status.textContent = statusText();
+    const dg0 = state.diag || {};
+    const problem = state.bridge === 'down' ? 'Harness Bridge app not reachable.' : dg0.input === false ? 'Chat box not found on this page.' : '';
+    const message = state.note || problem;
+    if (message) {
+      pill.note.textContent = message;
+      pill.note.className = `note ${state.note ? state.noteKind || 'warn' : 'warn'}`;
+      pill.status.replaceChildren(pill.note);
+    } else {
+      pill.status.replaceChildren(pill.name, ` · ${statusText()}`);
+    }
 
     // Minimized: only the header row, but never while something needs attention.
     const active = approvals.length > 0 || state.busy;
@@ -984,9 +1011,6 @@
     for (const k of ['autoRun', 'autoSend']) pill[k].checked = state.settings[k];
     const dg = state.diag || {};
     pill.diag.textContent = `Seen on page: ${dg.blocks ?? 0} action block${dg.blocks === 1 ? '' : 's'} · chat box ${dg.input ? '✓' : '✗'} · send button ${dg.send ? '✓' : '✗'}${dg.generating ? ' · generating' : ''}`;
-    const fallback = state.bridge === 'down' ? 'Harness Bridge app not reachable.' : dg.input === false ? 'Chat box not found on this page.' : '';
-    pill.note.textContent = state.note || fallback;
-    pill.note.classList.toggle('ok', pill.note.textContent.startsWith('✓'));
 
     const a = approvals[0];
     pill.card.classList.toggle('on', !!a);

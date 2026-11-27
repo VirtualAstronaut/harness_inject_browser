@@ -104,6 +104,8 @@ async function runSite(key, S) {
   ok(await waitFor(() => input.textContent.startsWith('[harness-bridge protocol]') && input.textContent.endsWith('list my files')), 'instructions placed above the typed text');
   ok(input.textContent.includes('Project folder: /Users/me/projects/my-app') && input.textContent.indexOf('Project folder') < input.textContent.indexOf('list my files'), 'instructions include the project folder');
   ok(sent.length === 0, 'nothing sent automatically');
+  const statusLine = () => panel()?.querySelector('.statusline')?.textContent || '';
+  ok(statusLine().includes('Instructions added'), 'status line says the instructions were added');
   click(button('Add instructions'));
   await sleep(150);
   ok((input.textContent.match(/\[harness-bridge protocol\]/g) || []).length === 1, 'a second click does not duplicate');
@@ -115,6 +117,7 @@ async function runSite(key, S) {
     .observe(panel(), { subtree: true, attributes: true, attributeFilter: ['class'] });
   click(d.getElementById('send'));
   ok(sent[0]?.startsWith('[harness-bridge protocol]') && sent[0].endsWith('list my files'), 'first message sent with instructions');
+  ok(!statusLine().includes('Instructions added') && statusLine().includes('Harness Bridge ·'), 'message cleared once the user sends');
 
   ok(await waitFor(() => calls.some((c) => c.id === 'c1')), 'c1 found and run');
   const c1 = calls.find((c) => c.id === 'c1');
