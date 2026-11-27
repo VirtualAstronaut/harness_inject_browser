@@ -89,7 +89,7 @@ export async function makePage({ url, body, reply, quillPaste = false, focused =
         setTimeout(() => {
           const p = msg.payload;
           calls.push({ ...p, t: Date.now() });
-          cb(reply(p, { calls, emitProgress }));
+          Promise.resolve(reply(p, { calls, emitProgress })).then(cb); // replies may be async (slow commands)
         }, 20);
       },
       onMessage: { addListener: (l) => listeners.push(l) },
@@ -103,7 +103,8 @@ export async function makePage({ url, body, reply, quillPaste = false, focused =
 
   const panel = () => roots.map((r) => r.querySelector('.p')).find(Boolean);
   const card = () => panel()?.querySelector('.section:not(.live)');
-  const button = (label, root = panel()) => [...(root?.querySelectorAll('button') || [])].find((b) => b.textContent === label);
+  // Text buttons by their text, icon buttons by their aria-label.
+  const button = (label, root = panel()) => [...(root?.querySelectorAll('button') || [])].find((b) => b.textContent === label || b.getAttribute('aria-label') === label);
   const clickCard = (label) => {
     const b = button(label, card());
     if (!b) throw new Error(`no "${label}" button in card: ${card()?.textContent}`);

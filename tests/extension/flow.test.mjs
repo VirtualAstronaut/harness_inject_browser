@@ -1,7 +1,7 @@
 // Full Gemini flow: trust prompt, live output, diff review, sandbox retry,
 // notifications, and results sent back.
 
-import { checker, esc, makePage, report } from './harness.mjs';
+import { checker, esc, makePage, report, sleep } from './harness.mjs';
 
 const { log, ok } = checker();
 
@@ -12,8 +12,12 @@ const reply = (p, { calls, emitProgress }) => {
   if (p.type === 'trust') return { type: 'trusted', added: p.paths, errors: [] };
   if (p.id === 'c1') {
     if (!p.trust_once && !calls.some((c) => c.type === 'trust')) return { type: 'result', id: 'c1', status: 'needs_trust', paths: ['/Users/me/other'] };
-    for (const chunk of ['total 8\n', 'a.txt\n', 'b.txt\n']) emitProgress('c1', chunk);
-    return { type: 'result', id: 'c1', status: 'ok', exit_code: 0, stdout: 'total 8\na.txt\nb.txt\n', sandbox: 'workspace-write', approval: 'policy' };
+    // A slow command (over 1 s), so the live output box opens.
+    return (async () => {
+      for (const chunk of ['total 8\n', 'a.txt\n', 'b.txt\n']) emitProgress('c1', chunk);
+      await sleep(1300);
+      return { type: 'result', id: 'c1', status: 'ok', exit_code: 0, stdout: 'total 8\na.txt\nb.txt\n', sandbox: 'workspace-write', approval: 'policy' };
+    })();
   }
   if (p.id === 'c2') {
     return p.approved
@@ -60,8 +64,9 @@ sendBtn.addEventListener('click', () => {
   }
 });
 
-await waitFor(() => panel()?.textContent.includes('Mode: Auto'), 2000);
-ok(panel().textContent.includes('Mode: Auto · Sandbox on · Edits: review'), 'panel shows mode / sandbox / edits');
+const modeChip = () => panel()?.querySelector('.chip');
+await waitFor(() => modeChip()?.textContent === 'Auto', 2000);
+ok(modeChip()?.title === 'Approval: Auto · Sandbox: on · File edits: reviewed' && !panel().querySelector('.chip.warn'), 'mode chip, details on hover, no warning chips');
 
 input.textContent = 'list my project files';
 click(button('Add instructions'));
@@ -98,7 +103,7 @@ ok(res.includes('b.txt') && res.includes('updated src/app.js') && res.includes('
 ok(notifies.at(-1)?.kind === 'notify-clear', 'notification cleared after the last prompt');
 ok(!res.includes('[harness-bridge protocol]'), 'instructions not added to later messages');
 ok(res.startsWith('[harness-bridge] results:\n\nProject folder: /Users/me/other-proj\n'), 'results start with the current project folder (after a switch)');
-ok(await waitFor(() => panel().textContent.includes('📁 other-proj') && panel().textContent.includes('/Users/me/other-proj · the model is told')), 'panel shows the switched project and its full path');
+ok(await waitFor(() => panel().textContent.includes('📁 other-proj') && panel().querySelector('.folder').title.startsWith('/Users/me/other-proj')), 'panel shows the switched project and its full path');
 
 pg.close();
 process.exit(report(log) ? 0 : 1);

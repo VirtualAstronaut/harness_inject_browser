@@ -75,7 +75,7 @@
   const FILE_OPS = { read_file: 'read', write_file: 'write', apply_patch: 'patch' };
 
   const state = {
-    settings: { autoRun: true, autoSend: true },
+    settings: { autoRun: true, autoSend: true, collapsed: false },
     executed: new Set(), // keys of blocks already run (persisted)
     armedAt: 0,
     sawGenerating: false,
@@ -176,10 +176,9 @@
   // have run `harness-bridge OTHER_FOLDER` in Terminal since the last ping).
   async function refreshInfo() {
     const r = await bridge({ type: 'ping' });
-    if (r.type === 'pong' && r.status !== 'error') {
-      state.bridge = 'ok';
-      state.info = r;
-    }
+    const up = r.type === 'pong' && r.status !== 'error';
+    state.bridge = up ? 'ok' : 'down';
+    if (up) state.info = r;
     render();
   }
   document.addEventListener('visibilitychange', () => {
@@ -359,6 +358,16 @@
     return `${RESULT_MARK}:\n\n${project ? `${project}\n\n` : ''}${body}`;
   }
 
+  // Quick commands (most of them) finish before this and never open the output box,
+  // so the panel doesn't flash open and shut. Slower ones open it and it stays open
+  // until the batch ends.
+  const LIVE_DELAY_MS = 1000;
+  function startRunning(id, label) {
+    state.running = { id, label, out: '', started: Date.now() };
+    state.live = state.running;
+    setTimeout(render, LIVE_DELAY_MS + 20);
+  }
+
   // Ask the user (overlay panel) about a pending request; loops until it runs or is refused.
   async function resolvePrompts(b, payload, r) {
     const label = labelFor(b.req);
@@ -435,7 +444,7 @@
       }
       if (choice === 'deny') return { id: b.req.id, status: 'denied', error: 'user denied this action' };
       setStatus(b, '⏳ running…');
-      state.running = { id: b.req.id, label, out: '' };
+      startRunning(b.req.id, label);
       render();
       r = await bridge(payload);
     }
@@ -454,7 +463,7 @@
         // A manual click approves commands, but file edits still show their diff.
         payload.approved = manual && !['write_file', 'apply_patch'].includes(b.req.tool);
         setStatus(b, '⏳ running…');
-        state.running = { id: b.req.id, label: labelFor(b.req), out: '' };
+        startRunning(b.req.id, labelFor(b.req));
         render();
         let r = await bridge(payload);
         r = await resolvePrompts(b, payload, r);
@@ -469,6 +478,8 @@
       await deliver(formatResults(results));
     } finally {
       state.running = null;
+      state.live = null;
+      state.liveShown = false;
       state.busy = false;
       render();
     }
@@ -686,29 +697,44 @@
 
   const PANEL_CSS = `
     :host{all:initial}
-    .p{font:13px/1.4 system-ui,-apple-system,sans-serif;background:#1e1f22;color:#ececec;border:1px solid #3c3f44;
-       border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;
-       box-shadow:0 8px 28px #0008;width:300px;box-sizing:border-box;max-height:calc(100vh - 120px);overflow:auto}
-    .p.wide{width:min(520px,calc(100vw - 32px))}
-    .p.asking{border-color:#f0a020}
-    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-    .dot{width:9px;height:9px;border-radius:50%;flex:none}
-    .mode{color:#a8a8a8}
-    label{display:flex;gap:4px;align-items:center;cursor:pointer;color:#d0d0d0}
-    button{font:inherit;cursor:pointer;background:#2f3136;color:#ececec;border:1px solid #4a4d52;border-radius:7px;padding:2px 8px}
-    button:hover{background:#3a3d42}
-    .note{color:#f3b469}
+    .p{font:13px/1.45 system-ui,-apple-system,sans-serif;background:#1c1d20;color:#e8e8e8;border:1px solid #34363b;
+       border-radius:14px;padding:10px 12px 12px;display:flex;flex-direction:column;gap:10px;box-sizing:border-box;
+       width:min(320px,calc(100vw - 32px));overflow:auto;box-shadow:0 10px 30px #0009}
+    .p.asking{border-color:#d9962b}
+    .p.min{gap:0;padding-bottom:10px}
+    .p.min .body{display:none}
+    .head{display:flex;align-items:center;gap:6px;cursor:grab;user-select:none}
+    .head.dragging{cursor:grabbing}
+    .dot{width:8px;height:8px;border-radius:50%;flex:none;margin-right:2px}
+    .name{font-weight:600;white-space:nowrap}
+    .status{color:#8b8f96;font-size:12px;margin-right:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .icon{display:inline-flex;align-items:center;justify-content:center;flex:none;width:26px;height:26px;padding:0;
+          border:0;border-radius:7px;background:transparent;color:#9da1a8}
+    .icon:hover,.icon.on{background:#2c2e33;color:#fff}
+    .icon svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+    .body{display:flex;flex-direction:column;gap:10px}
+    .proj{display:flex;align-items:center;gap:6px;min-width:0}
+    .folder{font-weight:600;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-right:auto}
+    .folder.none{font-weight:400;color:#8b8f96}
+    .chip{font-size:11px;padding:1px 8px;border-radius:999px;background:#2a2c31;color:#a9adb4;white-space:nowrap;flex:none}
+    .chip.warn{background:#4a2b12;color:#ffb366}
+    button{font:inherit;cursor:pointer;background:#2a2c31;color:#e8e8e8;border:1px solid #3d4046;border-radius:8px;padding:5px 10px}
+    button:hover{background:#34363c}
+    .note{font-size:12px;color:#f3b469}
     .note.ok{color:#7ee787}
-    .modeline{color:#9ecbff;font-size:12px}
-    .project{color:#e6e6e6;font-size:12px;font-weight:600;word-break:break-all}
-    .diag{color:#8a8f98;font-size:11px}
-    .section{display:none;flex-direction:column;gap:8px;border-top:1px solid #3c3f44;padding-top:8px;margin-top:2px}
+    .note:empty{display:none}
+    .menu{display:none;flex-direction:column;gap:8px;padding:10px;border-radius:10px;background:#232428}
+    .menu.on{display:flex}
+    label{display:flex;gap:8px;align-items:center;cursor:pointer;color:#d0d3d8;font-size:12px}
+    .diag{color:#7d8188;font-size:11px}
+    .section{display:none;flex-direction:column;gap:8px;border-top:1px solid #34363b;padding-top:10px}
     .section.on{display:flex}
-    .title{font-weight:600;color:#ffcf7a}
+    .title{font-weight:600;color:#ffcf7a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .live .title{color:#9ecbff}
-    pre{margin:0;padding:8px 10px;background:#0f1012;color:#f5f5f5;border:1px solid #33363b;border-radius:8px;
+    pre{margin:0;padding:8px 10px;background:#0f1012;color:#f5f5f5;border:1px solid #2c2e33;border-radius:8px;
         font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;word-break:break-all;
         max-height:220px;overflow:auto}
+    .live pre{height:140px;max-height:none}
     .d-add{color:#7ee787;background:#2ea04326;display:block}
     .d-del{color:#ffa198;background:#f8514926;display:block}
     .d-hunk{color:#79c0ff;display:block}
@@ -716,13 +742,41 @@
     .meta{color:#b5b5b5;font-size:12px;word-break:break-all}
     .why{color:#f3b469;font-size:12px}
     .actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
-    .actions button{padding:5px 12px}
     .run{background:#2e7d32;border-color:#2e7d32;color:#fff;font-weight:600}
     .run:hover{background:#388e3c}
     .deny{background:transparent;border-color:#e57373;color:#ff8a80}
     .deny:hover{background:#e5737322}
     .stopbtn{border-color:#e57373;color:#ff8a80;background:transparent}
+    .stopbtn:disabled{opacity:.4;cursor:default}
     .queue{color:#a8a8a8;font-size:12px;margin-right:auto;align-self:center}`;
+
+  // Small line icons, built node by node (no innerHTML: some chat sites enforce Trusted Types).
+  const ICONS = {
+    refresh: ['M21 12a9 9 0 1 1-2.6-6.4', 'M21 4v5h-5'],
+    copy: ['M9 9h11v11H9z', 'M5 15H4V4h11v1'],
+    settings: ['M4 7h9', 'M17 7h3', 'M4 17h3', 'M11 17h9', 'M15 5v4', 'M9 15v4'],
+    down: ['M6 9l6 6 6-6'],
+    up: ['M6 15l6-6 6 6'],
+  };
+  function icon(name) {
+    const NS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('aria-hidden', 'true');
+    for (const d of ICONS[name]) {
+      const path = document.createElementNS(NS, 'path');
+      path.setAttribute('d', d);
+      svg.append(path);
+    }
+    return svg;
+  }
+  function iconButton(name, label, onClick, title = label) {
+    const b = el('button', { className: 'icon', title });
+    b.setAttribute('aria-label', label);
+    b.append(icon(name));
+    b.addEventListener('click', trusted(onClick));
+    return b;
+  }
 
   function renderDiff(pre, diff) {
     pre.replaceChildren();
@@ -740,40 +794,101 @@
     }
   }
 
+  // Output stays on screen for the whole batch (state.live keeps the last command), so
+  // the panel doesn't collapse and re-open between commands.
   function renderLive() {
     if (!pill) return;
-    const run = state.running;
-    pill.live.classList.toggle('on', !!run && !approvals.length);
+    const run = state.running || state.live;
+    if (state.running && Date.now() - state.running.started >= LIVE_DELAY_MS) state.liveShown = true;
+    pill.live.classList.toggle('on', !!run && state.busy && !approvals.length && !!state.liveShown);
+    pill.stop.disabled = !state.running;
     if (!run) return;
-    pill.liveTitle.textContent = `▶ Running: ${run.label}`;
+    pill.liveTitle.textContent = `${state.running ? '▶ Running' : '✓ Done'}: ${run.label}`;
     const atBottom = pill.liveOut.scrollTop + pill.liveOut.clientHeight >= pill.liveOut.scrollHeight - 20;
     pill.liveOut.textContent = run.out || '(no output yet)';
     if (atBottom) pill.liveOut.scrollTop = pill.liveOut.scrollHeight;
-    pill.panel.classList.toggle('wide', true);
+  }
+
+  // ---- position: top-right by default, away from the chat box; drag the header to move ----
+  // Stored as distance from the top and right edges, so it stays in the same corner
+  // when the window is resized.
+  let pill_host;
+  const DEFAULT_POS = { top: 72, right: 16 };
+  function placePanel() {
+    if (!pill_host) return;
+    const pos = state.settings.pos || DEFAULT_POS;
+    const top = Math.min(Math.max(8, pos.top), Math.max(8, window.innerHeight - 56));
+    const right = Math.min(Math.max(8, pos.right), Math.max(8, window.innerWidth - 120));
+    pill_host.style.top = `${top}px`;
+    pill_host.style.right = `${right}px`;
+    // Grow downwards, but never past the bottom of the window.
+    if (pill) pill.panel.style.maxHeight = `${Math.max(120, window.innerHeight - top - 16)}px`;
+  }
+  function makeDraggable(head) {
+    head.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 || e.target.closest('button')) return;
+      const start = { x: e.clientX, y: e.clientY, ...(state.settings.pos || DEFAULT_POS) };
+      head.classList.add('dragging');
+      head.setPointerCapture?.(e.pointerId);
+      const move = (ev) => {
+        state.settings.pos = { top: start.top + (ev.clientY - start.y), right: start.right - (ev.clientX - start.x) };
+        placePanel();
+      };
+      const up = () => {
+        head.classList.remove('dragging');
+        head.removeEventListener('pointermove', move);
+        head.removeEventListener('pointerup', up);
+        head.removeEventListener('pointercancel', up);
+        saveSettings();
+      };
+      head.addEventListener('pointermove', move);
+      head.addEventListener('pointerup', up);
+      head.addEventListener('pointercancel', up);
+    });
+    // Double-click the header to put it back in the default corner.
+    head.addEventListener('dblclick', (e) => {
+      if (e.target.closest('button')) return;
+      delete state.settings.pos;
+      saveSettings();
+      placePanel();
+    });
+  }
+
+  function statusText() {
+    if (approvals.length) return 'needs you';
+    if (state.running) return `running: ${state.running.label}`;
+    if (state.busy) return 'working';
+    if (state.bridge === 'down') return 'not connected';
+    if (armed()) return 'waiting for reply';
+    return 'ready';
   }
 
   function render() {
     if (!pill) {
       const host = el('div');
       host.dataset.hbUi = '1';
-      host.style.cssText = 'position:fixed;right:16px;bottom:96px;z-index:2147483647;';
+      host.style.cssText = 'position:fixed;z-index:2147483647;';
       document.documentElement.append(host);
+      pill_host = host;
+      placePanel();
+      window.addEventListener('resize', placePanel);
       const root = host.attachShadow({ mode: 'closed' });
       pill = {
         panel: el('div', { className: 'p' }),
         dot: el('span', { className: 'dot' }),
-        mode: el('span', { className: 'mode' }),
-        modeLine: el('div', { className: 'modeline' }),
-        project: el('div', { className: 'project' }),
-        projectPath: el('div', { className: 'diag' }),
+        status: el('span', { className: 'status' }),
+        folder: el('span', { className: 'folder' }),
+        chips: el('span', { className: 'proj' }),
         note: el('div', { className: 'note' }),
         diag: el('div', { className: 'diag' }),
+        menu: el('div', { className: 'menu' }),
         autoRun: el('input', { type: 'checkbox' }),
         autoSend: el('input', { type: 'checkbox' }),
         // live output
         live: el('div', { className: 'section live' }),
         liveTitle: el('div', { className: 'title' }),
         liveOut: el('pre'),
+        stop: el('button', { className: 'stopbtn', textContent: '■ Stop' }),
         // prompt card
         card: el('div', { className: 'section' }),
         title: el('div', { className: 'title' }),
@@ -783,75 +898,99 @@
         actions: el('div', { className: 'actions' }),
         shown: null,
       };
-      const pingBtn = el('button', { textContent: 'Ping' });
-      pingBtn.addEventListener('click', trusted(pingClicked));
       for (const k of ['autoRun', 'autoSend']) {
         pill[k].onchange = () => ((state.settings[k] = pill[k].checked), saveSettings());
       }
+      const menuBtn = iconButton('settings', 'Settings', () => {
+        pill.menu.classList.toggle('on');
+        menuBtn.classList.toggle('on', pill.menu.classList.contains('on'));
+      });
+      pill.minBtn = iconButton('down', 'Minimize', () => {
+        state.settings.collapsed = !state.settings.collapsed;
+        saveSettings();
+        render();
+      });
       const addBtn = el('button', {
         textContent: 'Add instructions',
         title: 'Put the Harness Bridge instructions at the top of the chat box. Use it once, in the first message of a chat.',
       });
       addBtn.addEventListener('click', trusted(addInstructions));
-      const copyBtn = el('button', { textContent: 'Copy instructions', title: 'For a Gem, Custom GPT or Claude Project' });
-      copyBtn.addEventListener('click', trusted(copyInstructions));
-      const stopBtn = el('button', { className: 'stopbtn', textContent: '■ Stop' });
-      stopBtn.addEventListener('click', trusted(() => state.running && bridge({ type: 'stop', id: state.running.id })));
-      pill.live.append(el('div', { className: 'row' }, pill.liveTitle), pill.liveOut, el('div', { className: 'actions' }, stopBtn));
+      pill.stop.addEventListener('click', trusted(() => state.running && bridge({ type: 'stop', id: state.running.id })));
+
+      pill.menu.append(
+        el('label', { title: 'Run actions in new replies without clicking Run locally' }, pill.autoRun, 'Run actions automatically'),
+        el('label', { title: 'Paste results into the chat box and press Send' }, pill.autoSend, 'Send results automatically'),
+        pill.diag,
+      );
+      pill.live.append(pill.liveTitle, pill.liveOut, el('div', { className: 'actions' }, pill.stop));
       pill.card.append(pill.title, pill.body, pill.meta, pill.why, pill.actions);
 
+      const name = el('span', { className: 'name', textContent: 'Harness Bridge', title: `Harness Bridge on ${SITE.name}` });
+      const head = el(
+        'div',
+        { className: 'head', title: 'Drag to move' },
+        pill.dot,
+        name,
+        pill.status,
+        iconButton('refresh', 'Check connection', pingClicked),
+        iconButton('copy', 'Copy instructions', copyInstructions, 'Copy instructions, for a Gem, Custom GPT or Claude Project'),
+        menuBtn,
+        pill.minBtn,
+      );
+      makeDraggable(head);
       pill.panel.append(
-        el('div', { className: 'row' }, pill.dot, el('b', { textContent: `Harness Bridge · ${SITE.name}` }), pill.mode, pingBtn),
-        pill.project,
-        pill.projectPath,
-        pill.modeLine,
-        el(
-          'div',
-          { className: 'row' },
-          el('label', {}, pill.autoRun, 'Auto-run'),
-          el('label', {}, pill.autoSend, 'Auto-send results'),
-        ),
-        el('div', { className: 'row' }, addBtn, copyBtn),
-        pill.note,
-        pill.diag,
+        head,
+        el('div', { className: 'body' }, el('div', { className: 'proj' }, pill.folder, pill.chips), pill.menu, addBtn, pill.note),
         pill.live,
         pill.card,
       );
       root.append(el('style', { textContent: PANEL_CSS }), pill.panel);
+      placePanel(); // now that the panel exists, also cap its height
     }
 
-    pill.dot.style.background = { ok: '#4caf50', down: '#e53935', unknown: '#999' }[state.bridge];
-    pill.mode.textContent = approvals.length
-      ? '· needs you'
-      : state.running
-        ? '· running'
-        : state.busy
-          ? '· working'
-          : armed()
-            ? '· armed'
-            : '· idle';
     const i = state.info;
-    const modeName = { auto: 'Auto', inline: 'Allowlist', dialog: 'Allowlist + dialog' }[i.approval];
-    pill.modeLine.textContent = modeName
-      ? `Mode: ${modeName} · Sandbox ${i.sandbox ? 'on' : 'OFF'} · Edits: ${i.auto_accept_edits ? 'auto-accept' : 'review'}`
-      : '';
-    pill.project.textContent = i.project
+    pill.dot.style.background = { ok: '#4caf50', down: '#e53935', unknown: '#777' }[state.bridge];
+    pill.status.textContent = statusText();
+
+    // Minimized: only the header row, but never while something needs attention.
+    const active = approvals.length > 0 || state.busy;
+    const min = !!state.settings.collapsed && !active;
+    pill.panel.classList.toggle('min', min);
+    pill.minBtn.replaceChildren(icon(min ? 'up' : 'down'));
+    pill.minBtn.title = min ? 'Expand' : 'Minimize';
+    pill.minBtn.setAttribute('aria-label', pill.minBtn.title);
+
+    // Project: name, full path on hover. Chips only for the mode and for unusual settings.
+    pill.folder.textContent = i.project
       ? `📁 ${i.project_name || i.project}`
       : state.bridge === 'ok'
-        ? 'No project folder. In Terminal: cd your-project && harness-bridge .'
+        ? 'No project. In Terminal: harness-bridge .'
         : '';
-    pill.project.title = i.project || '';
-    pill.projectPath.textContent = i.project ? `${i.project} · the model is told this folder with every result` : '';
+    pill.folder.classList.toggle('none', !i.project);
+    pill.folder.title = i.project ? `${i.project}\nThe model is told this folder with every result.` : '';
+    const modeName = { auto: 'Auto', inline: 'Allowlist', dialog: 'Allowlist' }[i.approval];
+    const chip = (text, title, warn = false) => el('span', { className: warn ? 'chip warn' : 'chip', textContent: text, title });
+    pill.chips.replaceChildren(
+      ...(modeName
+        ? [
+            chip(modeName, `Approval: ${modeName}${i.approval === 'dialog' ? ' + macOS dialog' : ''} · Sandbox: ${i.sandbox ? 'on' : 'off'} · File edits: ${i.auto_accept_edits ? 'auto-accepted' : 'reviewed'}`),
+            ...(i.sandbox ? [] : [chip('Sandbox off', 'Commands run without the macOS sandbox', true)]),
+            ...(i.auto_accept_edits ? [chip('Edits auto', 'File edits are applied without review', true)] : []),
+            ...(i.auto_approve ? [chip('Auto-approve', 'HARNESS_BRIDGE_AUTO_APPROVE is set: nothing asks', true)] : []),
+          ]
+        : []),
+    );
+
     for (const k of ['autoRun', 'autoSend']) pill[k].checked = state.settings[k];
     const dg = state.diag || {};
     pill.diag.textContent = `Seen on page: ${dg.blocks ?? 0} action block${dg.blocks === 1 ? '' : 's'} · chat box ${dg.input ? '✓' : '✗'} · send button ${dg.send ? '✓' : '✗'}${dg.generating ? ' · generating' : ''}`;
-    pill.note.textContent = state.bridge === 'down' && !state.note ? 'Bridge app/host not reachable.' : state.note;
+    const fallback = state.bridge === 'down' ? 'Harness Bridge app not reachable.' : dg.input === false ? 'Chat box not found on this page.' : '';
+    pill.note.textContent = state.note || fallback;
     pill.note.classList.toggle('ok', pill.note.textContent.startsWith('✓'));
 
     const a = approvals[0];
     pill.card.classList.toggle('on', !!a);
     pill.panel.classList.toggle('asking', !!a);
-    pill.panel.classList.toggle('wide', !!a || !!state.running);
     if (a && pill.shown !== a) {
       pill.shown = a;
       const it = a.item;
@@ -881,7 +1020,7 @@
     decorateAll(); // also fills the diagnostics line
     render();
     ping();
-    setInterval(() => document.visibilityState === 'visible' && !state.busy && ping(), 20000); // picks up menu-bar changes
+    setInterval(() => document.visibilityState === 'visible' && !state.busy && refreshInfo(), 20000); // picks up menu-bar changes, keeps the note
     new MutationObserver(() => {
       watchGenerating();
       schedule();

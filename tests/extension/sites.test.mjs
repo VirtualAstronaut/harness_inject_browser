@@ -78,12 +78,23 @@ async function runSite(key, S) {
   });
 
   await waitFor(() => panel()?.textContent.includes('📁 my-app'), 2000);
-  ok(panel()?.textContent.includes(`Harness Bridge · ${S.name}`), 'panel loaded with site name');
+  ok(panel()?.querySelector('.name')?.title === `Harness Bridge on ${S.name}`, 'panel loaded with site name');
   ok(panel()?.textContent.includes('📁 my-app'), 'panel shows the project name');
-  ok(panel()?.textContent.includes('/Users/me/projects/my-app · the model is told this folder with every result'), 'panel shows the full path and that the model gets it');
+  ok(panel()?.querySelector('.folder')?.title.startsWith('/Users/me/projects/my-app\nThe model is told'), 'full project path on hover');
+  ok(!panel()?.querySelector('.menu.on') && panel()?.querySelector('.menu')?.textContent.includes('Seen on page'), 'toggles and diagnostics tucked into Settings');
+  ok(['Check connection', 'Copy instructions', 'Settings', 'Minimize'].every((l) => button(l)?.classList.contains('icon')), 'header has icon buttons');
+  const host = d.querySelector('[data-hb-ui]');
+  ok(host?.style.top === '72px' && host.style.right === '16px' && !host.style.bottom, 'panel starts top-right, clear of the chat box');
+  click(button('Settings'));
+  ok(!!panel()?.querySelector('.menu.on'), 'Settings opens the toggles');
+  click(button('Settings'));
+  click(button('Minimize'));
+  ok(panel()?.classList.contains('min') && !!button('Expand'), 'Minimize leaves only the header');
+  click(button('Expand'));
+  ok(!panel()?.classList.contains('min'), 'Expand restores the panel');
   ok(/Seen on page: 0 action blocks · chat box ✓ · send button ✓/.test(panel()?.textContent), 'diagnostics: chat box + send button found');
 
-  click(button('Ping'));
+  click(button('Check connection'));
   ok(await waitFor(() => panel()?.querySelector('.note.ok')?.textContent === '✓ Connected to Harness Bridge', 1000), 'Ping shows a visible confirmation');
 
   input.textContent = 'list my files';
@@ -98,6 +109,10 @@ async function runSite(key, S) {
   ok((input.textContent.match(/\[harness-bridge protocol\]/g) || []).length === 1, 'a second click does not duplicate');
   ok(S.quillPaste ? counts.pastes > 0 : counts.pastes === 0, S.quillPaste ? 'used paste (Quill)' : 'typed, no paste event (avoids claude.ai attachments)');
 
+  // Both commands here are quick: the output box must never open (no flash).
+  let liveOpened = false;
+  new pg.w.MutationObserver(() => { if (panel()?.querySelector('.live.on')) liveOpened = true; })
+    .observe(panel(), { subtree: true, attributes: true, attributeFilter: ['class'] });
   click(d.getElementById('send'));
   ok(sent[0]?.startsWith('[harness-bridge protocol]') && sent[0].endsWith('list my files'), 'first message sent with instructions');
 
@@ -109,6 +124,7 @@ async function runSite(key, S) {
   ok(await waitFor(() => card()?.classList.contains('on') && card().textContent.includes('Review changes to src/app.js')), 'diff card shown');
   click(button('Apply', card()));
   ok(await waitFor(() => sent.length === 2), 'results sent back');
+  ok(!liveOpened, 'quick commands never open the output box');
   ok((sent[1] || '').startsWith('[harness-bridge] results') && (sent[1].match(/```local-result/g) || []).length === 2 && sent[1].includes('updated src/app.js'), 'two local-result blocks with outputs');
   ok((sent[1] || '').includes('\n\nProject folder: /Users/me/projects/my-app\n\n```local-result'), 'results name the project folder above the blocks');
   ok(/"redacted": 1/.test(sent[1] || '') && (sent[1] || '').includes('[REDACTED:openai-key]'), 'masked count passed to the model');
