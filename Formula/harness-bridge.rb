@@ -6,6 +6,7 @@ class HarnessBridge < Formula
   homepage "https://github.com/VirtualAstronaut/harness_inject_browser"
   url "https://github.com/VirtualAstronaut/harness_inject_browser/archive/refs/tags/v0.1.3.tar.gz"
   sha256 "c065b3a9f18b457f16f8643bccb3c58446e28d2524717725c27e49c85c5d3b69"
+  license "GPL-3.0-or-later"
   head "https://github.com/VirtualAstronaut/harness_inject_browser.git", branch: "main"
 
   depends_on "rust" => :build

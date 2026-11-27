@@ -222,3 +222,9 @@ Each site's selectors are in the `SITES` table at the top of `extension/content.
 - File tools and unsandboxed retries run outside the sandbox. Only trust and your approval protect them.
 - Any program running as you can connect to the app.
 - Text the model reads can trick it (prompt injection). Read each command before you click **Run**.
+
+## License
+
+Harness Bridge is free software under the [GNU General Public License v3.0 or later](LICENSE). You can use, change and share it. If you share a changed version, you must also share its source code under the same license.
+
+The macOS sandbox rules in `app/src/seatbelt_base.sbpl` and `app/src/seatbelt_network.sbpl` come from [OpenAI Codex](https://github.com/openai/codex) and are licensed under the [Apache License 2.0](LICENSES/Apache-2.0.txt). See [NOTICE](NOTICE) for details.

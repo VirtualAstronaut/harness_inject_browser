@@ -1,0 +1,25 @@
+Harness Bridge
+Copyright (C) 2026 VirtualAstronaut
+
+This program is free software: you can redistribute it and/or modify it
+under the terms of the GNU General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option)
+any later version. See LICENSE.
+
+-------------------------------------------------------------------------
+
+This project includes the following files from OpenAI Codex
+(https://github.com/openai/codex), licensed under the Apache License,
+Version 2.0 (see LICENSES/Apache-2.0.txt). They are unchanged apart from
+an attribution comment added at the top:
+
+  app/src/seatbelt_base.sbpl     from codex-rs/sandboxing/src/seatbelt_base_policy.sbpl
+  app/src/seatbelt_network.sbpl  from codex-rs/sandboxing/src/seatbelt_network_policy.sbpl
+
+The danger rules in app/src/policy.rs are inspired by Codex's
+is_dangerous_command.rs; no code was copied from it.
+
+Notice from OpenAI Codex:
+
+  OpenAI Codex
+  Copyright 2025 OpenAI
