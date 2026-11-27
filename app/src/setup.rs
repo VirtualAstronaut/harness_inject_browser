@@ -91,10 +91,63 @@ fn manifest_path(support: &Path, dir: &str) -> PathBuf {
     support.join(dir).join("NativeMessagingHosts").join(format!("{HOST_NAME}.json"))
 }
 
+/// Profile folders whose `NativeMessagingHosts` the browser in `dir` reads.
+/// Brave 1.100 on macOS reads only Google Chrome's (seen with `fs_usage`); older
+/// versions read Brave's own, so write both. Side effect: Chrome, if installed, can
+/// then reach the host too (it still needs the extension loaded to use it).
+fn manifest_dirs(dir: &str) -> Vec<&str> {
+    match dir {
+        "BraveSoftware/Brave-Browser" => vec![dir, "Google/Chrome"],
+        _ => vec![dir],
+    }
+}
+
+/// Every manifest file the browser in `dir` needs.
+fn manifest_paths(support: &Path, dir: &str) -> Vec<PathBuf> {
+    manifest_dirs(dir).into_iter().map(|d| manifest_path(support, d)).collect()
+}
+
+/// A browser counts as installed once it has run and written `Local State`. The folder
+/// alone is not enough: setup itself creates Google/Chrome/NativeMessagingHosts for Brave.
+fn installed(support: &Path, dir: &str) -> bool {
+    support.join(dir).join("Local State").is_file()
+}
+
 /// True if any browser already has the Harness Bridge manifest.
 pub fn is_registered(home: &Path) -> bool {
     let support = home.join("Library/Application Support");
-    BROWSERS.iter().any(|(dir, _)| manifest_path(&support, dir).is_file())
+    BROWSERS.iter().any(|(dir, _)| installed(&support, dir) && manifest_path(&support, dir).is_file())
+}
+
+/// Completes connections made by older versions, which wrote only the browser's own
+/// manifest (Brave before 0.1.2). The own manifest is the user's choice, so it is the
+/// only source copied; a browser the user never connected is left alone.
+/// Returns the browsers it fixed.
+pub fn repair(home: &Path) -> Vec<&'static str> {
+    let support = home.join("Library/Application Support");
+    let mut fixed = vec![];
+    for (dir, app) in BROWSERS {
+        if !installed(&support, dir) {
+            continue;
+        }
+        let Ok(body) = fs::read_to_string(manifest_path(&support, dir)) else { continue };
+        let missing = manifest_paths(&support, dir).into_iter().any(|p| !p.is_file());
+        if missing && write_manifests(&support, dir, &body).is_ok() {
+            fixed.push(*app);
+        }
+    }
+    fixed
+}
+
+/// Writes `body` to every manifest file the browser in `dir` needs.
+fn write_manifests(support: &Path, dir: &str, body: &str) -> std::io::Result<()> {
+    for file in manifest_paths(support, dir) {
+        if let Some(parent) = file.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(&file, body)?;
+    }
+    Ok(())
 }
 
 /// True when a person can answer prompts: not `brew test`, CI or a pipe.
@@ -137,7 +190,8 @@ fn choose<'a>(
     }
     let _ = writeln!(out, "Which browsers should Harness Bridge connect to?");
     for (i, (dir, app)) in found.iter().enumerate() {
-        let note = if manifest_path(support, dir).is_file() { "  (already connected)" } else { "" };
+        let connected = manifest_paths(support, dir).iter().all(|f| f.is_file());
+        let note = if connected { "  (already connected)" } else { "" };
         let _ = writeln!(out, "  {}) {app}{note}", i + 1);
     }
     loop {
@@ -190,7 +244,7 @@ pub fn run(home: &Path, starting: bool) -> i32 {
     };
 
     let support = home.join("Library/Application Support");
-    let found: Vec<(&str, &str)> = BROWSERS.iter().copied().filter(|(dir, _)| support.join(dir).is_dir()).collect();
+    let found: Vec<(&str, &str)> = BROWSERS.iter().copied().filter(|(dir, _)| installed(&support, dir)).collect();
     if found.is_empty() {
         eprintln!("✕ no Chrome-family browser found under {}", support.display());
         eprintln!("  Supported: Chrome, Brave, Edge, Chromium and Arc. Open one once, then run setup again.");
@@ -209,9 +263,7 @@ pub fn run(home: &Path, starting: bool) -> i32 {
     let body = manifest(&host);
     let mut registered: Vec<&str> = vec![];
     for (dir, app) in &chosen {
-        let file = manifest_path(&support, dir);
-        let written = file.parent().map_or(Ok(()), fs::create_dir_all).and_then(|_| fs::write(&file, &body));
-        match written {
+        match write_manifests(&support, dir, &body) {
             Ok(()) => {
                 println!("✓ connected {app}");
                 registered.push(app);
@@ -322,6 +374,55 @@ mod tests {
     fn choose_single_browser_is_yes_no() {
         assert_eq!(pick("\n", &TWO[..1]), ["Google Chrome"]);
         assert!(pick("n\n", &TWO[..1]).is_empty());
+    }
+
+    /// Fresh `Application Support` folder under the system temp dir.
+    fn temp_support(name: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("hb-setup-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&d);
+        fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    #[test]
+    fn brave_also_gets_chromes_manifest() {
+        let s = temp_support("brave");
+        write_manifests(&s, "BraveSoftware/Brave-Browser", "{}").unwrap();
+        assert!(manifest_path(&s, "BraveSoftware/Brave-Browser").is_file());
+        assert!(manifest_path(&s, "Google/Chrome").is_file(), "Brave 1.100 reads Chrome's folder");
+        write_manifests(&s, "Microsoft Edge", "{}").unwrap();
+        assert!(manifest_path(&s, "Microsoft Edge").is_file());
+        assert!(!manifest_path(&s, "Chromium").exists(), "other browsers write only their own");
+        let _ = fs::remove_dir_all(&s);
+    }
+
+    #[test]
+    fn repair_completes_only_connected_browsers() {
+        let home = temp_support("repair");
+        let s = home.join("Library/Application Support");
+        for dir in ["BraveSoftware/Brave-Browser", "Microsoft Edge"] {
+            fs::create_dir_all(s.join(dir)).unwrap();
+            fs::write(s.join(dir).join("Local State"), "{}").unwrap();
+        }
+        // 0.1.1 connected Brave: only Brave's own manifest exists. Edge was never connected.
+        fs::create_dir_all(manifest_path(&s, "BraveSoftware/Brave-Browser").parent().unwrap()).unwrap();
+        fs::write(manifest_path(&s, "BraveSoftware/Brave-Browser"), "BODY").unwrap();
+
+        assert_eq!(repair(&home), ["Brave Browser"]);
+        assert_eq!(fs::read_to_string(manifest_path(&s, "Google/Chrome")).unwrap(), "BODY");
+        assert!(!manifest_path(&s, "Microsoft Edge").exists(), "never connected, so left alone");
+        assert!(repair(&home).is_empty(), "nothing left to fix");
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn installed_needs_local_state_not_just_the_folder() {
+        let s = temp_support("installed");
+        fs::create_dir_all(s.join("Google/Chrome/NativeMessagingHosts")).unwrap();
+        assert!(!installed(&s, "Google/Chrome"), "a folder setup created is not an installed browser");
+        fs::write(s.join("Google/Chrome/Local State"), "{}").unwrap();
+        assert!(installed(&s, "Google/Chrome"));
+        let _ = fs::remove_dir_all(&s);
     }
 
     #[test]

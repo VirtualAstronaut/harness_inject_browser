@@ -43,7 +43,9 @@ class HarnessBridge < Formula
     assert_path_exists pkgshare/"extension/manifest.json"
 
     # setup writes a manifest that points at the upgrade-proof opt path.
+    # A browser counts as installed once it has written "Local State".
     (testpath/"Library/Application Support/Google/Chrome").mkpath
+    (testpath/"Library/Application Support/Google/Chrome/Local State").write "{}"
     with_env(HOME: testpath.to_s) { system bin/"harness-bridge", "setup" }
     manifest = testpath/"Library/Application Support/Google/Chrome/NativeMessagingHosts/com.harness.bridge.json"
     assert_match "#{opt_libexec}/bridge-host", manifest.read

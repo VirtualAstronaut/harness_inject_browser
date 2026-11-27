@@ -846,6 +846,9 @@ fn cli() -> Option<PathBuf> {
             }
         }
     }
+    for app in setup::repair(&home()) {
+        println!("✓ updated the {app} connection");
+    }
     first_run_setup();
     project
 }
