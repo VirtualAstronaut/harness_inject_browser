@@ -4,8 +4,8 @@
 class HarnessBridge < Formula
   desc "Lets Gemini, ChatGPT and Claude web chats run sandboxed commands on your Mac"
   homepage "https://github.com/VirtualAstronaut/harness_inject_browser"
-  url "https://github.com/VirtualAstronaut/harness_inject_browser/archive/refs/tags/v0.1.2.tar.gz"
-  sha256 "a4e9da1446478f9028a4ad8d778fc5a585b0a02cad0abed8f71966bb5f37df19"
+  url "https://github.com/VirtualAstronaut/harness_inject_browser/archive/refs/tags/v0.1.3.tar.gz"
+  sha256 "c065b3a9f18b457f16f8643bccb3c58446e28d2524717725c27e49c85c5d3b69"
   head "https://github.com/VirtualAstronaut/harness_inject_browser.git", branch: "main"
 
   depends_on "rust" => :build
