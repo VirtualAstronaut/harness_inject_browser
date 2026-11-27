@@ -36,8 +36,14 @@ You need macOS, [Homebrew](https://brew.sh) and a Chrome-family browser (Chrome,
    harness-bridge setup
    ```
 
-   It prints the extension folder to use in the next step.
-3. Open `chrome://extensions`. Turn on **Developer mode**. Click **Load unpacked** and choose the folder that `setup` printed. It is `$(brew --prefix)/opt/harness-bridge/share/harness-bridge/extension`.
+   It asks which browsers to connect. Then it offers to open the extensions page and copy the extension folder path to your clipboard. If you skip this step, the first `harness-bridge .` offers to run it for you.
+3. Load the extension:
+   1. On the extensions page, turn on **Developer mode** (top right).
+   2. Click **Load unpacked**.
+   3. Press **⌘⇧G**, then **⌘V** to paste the path, and press Return.
+   4. Click **Select**.
+
+   If the page didn't open, go to `chrome://extensions`. The folder is `$(brew --prefix)/opt/harness-bridge/share/harness-bridge/extension`.
 4. Start the app in your project folder:
 
    ```sh

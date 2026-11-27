@@ -792,8 +792,9 @@ becomes the project: it is trusted (and remembered), and actions from the chat
 run there unless they name another folder. If Harness Bridge is already running,
 FOLDER is handed to it and this command exits.
 
-`setup` registers the browser connection for Chrome, Brave, Edge, Chromium and Arc.
-Run it once after installing. (For a folder named setup, use `./setup`.)";
+`setup` asks which browsers (Chrome, Brave, Edge, Chromium, Arc) to connect, then
+helps you load the extension. The first start offers to run it for you.
+(For a folder named setup, use `./setup`.)";
 
 /// Parse arguments; hand the folder to a running instance if there is one.
 /// Returns the project folder to start with.
@@ -804,7 +805,7 @@ fn cli() -> Option<PathBuf> {
         std::process::exit(0);
     }
     if args.len() == 1 && args[0] == "setup" {
-        std::process::exit(setup::run(&home()));
+        std::process::exit(setup::run(&home(), false));
     }
     if args.len() > 1 {
         eprintln!("{USAGE}");
@@ -845,7 +846,28 @@ fn cli() -> Option<PathBuf> {
             }
         }
     }
+    first_run_setup();
     project
+}
+
+/// First start with no browser connected: offer to run setup, once per Mac user,
+/// whatever the outcome, so later starts never nag.
+fn first_run_setup() {
+    let offered = support_dir().join("setup-offered");
+    if !setup::interactive() || setup::is_registered(&home()) || offered.exists() {
+        return;
+    }
+    let _ = fs::create_dir_all(support_dir());
+    let _ = fs::write(&offered, "");
+    println!("Harness Bridge isn't connected to a browser yet.");
+    let yes = setup::ask_yes(&mut std::io::stdin().lock(), &mut std::io::stdout(), "Set it up now?", true);
+    if yes {
+        println!();
+        setup::run(&home(), true); // explains how to retry if nothing was connected
+        println!();
+    } else {
+        println!("OK, I won't ask again. Run `harness-bridge setup` any time.\n");
+    }
 }
 
 fn main() {

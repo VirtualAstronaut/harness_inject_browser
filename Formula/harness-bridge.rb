@@ -22,11 +22,14 @@ class HarnessBridge < Formula
     <<~EOS
       Finish setting up (once per user):
 
-        1. Register the browser connection:
+        1. Connect your browsers:
              harness-bridge setup
+           It asks which browsers to connect, then offers to open the
+           extensions page and copy the extension folder path.
 
-        2. Open chrome://extensions, turn on Developer mode, click
-           Load unpacked and choose:
+        2. Turn on Developer mode, click Load unpacked, press ⌘⇧G,
+           paste the path (⌘V), press Return and click Select.
+           The folder is:
              #{opt_pkgshare}/extension
 
         3. Start a session in your project folder:
