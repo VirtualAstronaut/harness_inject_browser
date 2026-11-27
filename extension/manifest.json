@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Harness Bridge",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Lets Gemini, ChatGPT and Claude run sandboxed commands and edit files on this Mac, with your approval.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsprrQXBCkhqq60T3oMdTJKPUescqviC54D1MP79qNqA0+Jnkyyz612TLFnw7HnaG7iwWbiGnUSIrn4Lz1X3ASKMHL4lR4YjGPHzHosmrDormOPv5nmtFKGBhcAG+aS+orEzRuOnUCOWHm3xZGyv1kLMl3T5niFBvk7YKjug/l9BONF0kltRifv5bZciVNEc61HuYgpNTQLo5l2tTwK4iW4LIAebV0r7cVLWgqstVvTTUl0+5/waqDEnoouf2X4IvIyBlL9dgPPRDhDEfxnl7OJeCGUiasWqP1/RKGIjF/ibStkjQ5Zrj4vwEb0M+tCh051ksqgt/dRVkPaa0NKGCRwIDAQAB",
   "permissions": [
