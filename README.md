@@ -4,6 +4,12 @@ Harness Bridge lets Gemini, ChatGPT and Claude run commands and edit files on yo
 
 It is a proof of concept. Read every command before you approve it. This was mostly a thought experiment, made with the help of Claude.
 
+## Demo
+
+![Starting Harness Bridge in a terminal, connecting the extension, adding the instructions to Gemini, and running a command in the project folder](docs/demo-v2.gif)
+
+The whole flow, step by step: start the app in your project folder, connect the extension, add the instructions with one click, then let Gemini list the project and explain it. Waiting time is sped up. [Watch the sharper MP4](docs/demo-v2.mp4).
+
 ## How it works
 
 1. The chat model writes an action as JSON in a code block.
