@@ -177,6 +177,14 @@ pub fn ask_yes(input: &mut impl BufRead, out: &mut impl Write, prompt: &str, def
     }
 }
 
+/// Asks for an exact word (for risky choices). Anything else, or end of input, is no.
+pub fn ask_exact(input: &mut impl BufRead, out: &mut impl Write, prompt: &str, word: &str) -> bool {
+    let _ = write!(out, "{prompt} Type {word} to confirm: ");
+    let _ = out.flush();
+    let mut line = String::new();
+    input.read_line(&mut line).unwrap_or(0) > 0 && line.trim() == word
+}
+
 /// Asks which of the `found` browsers (folder, app name) to connect. Empty answer → all.
 fn choose<'a>(
     input: &mut impl BufRead,
@@ -350,6 +358,16 @@ mod tests {
         assert!(!yes("no\n", true));
         assert!(yes("maybe\nyes\n", false), "re-asks after an unclear answer");
         assert!(!yes("", true), "end of input means no");
+    }
+
+    #[test]
+    fn ask_exact_needs_the_word() {
+        let ask = |a: &str| ask_exact(&mut a.as_bytes(), &mut Vec::new(), "Trust /?", "yes");
+        assert!(ask("yes\n"));
+        assert!(!ask("y\n"), "y is not enough for a risky choice");
+        assert!(!ask("YES please\n"));
+        assert!(!ask("\n"));
+        assert!(!ask(""), "end of input means no");
     }
 
     const TWO: &[(&str, &str)] = &[("Google/Chrome", "Google Chrome"), ("BraveSoftware/Brave-Browser", "Brave Browser")];

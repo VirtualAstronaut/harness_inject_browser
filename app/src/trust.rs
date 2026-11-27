@@ -58,6 +58,14 @@ impl TrustStore {
 
 /// Canonical path (symlinks resolved, /tmp -> /private/tmp); falls back to a
 /// lexical clean-up for paths that don't exist yet.
+/// Folders too broad to trust casually: the disk root, the home folder or anything
+/// above it (such as /Users), and the top of a drive (/Volumes/NAME).
+pub fn is_broad(dir: &Path, home: &Path) -> bool {
+    let d = canon(dir);
+    let h = canon(home);
+    d == Path::new("/") || h.starts_with(&d) || d.parent() == Some(Path::new("/Volumes"))
+}
+
 pub fn canon(p: &Path) -> PathBuf {
     fs::canonicalize(p).unwrap_or_else(|_| lexical(p))
 }
@@ -136,6 +144,17 @@ mod tests {
             .into_iter()
             .map(|p| p.display().to_string())
             .collect()
+    }
+
+    #[test]
+    fn broad_folders() {
+        let home = Path::new("/Users/me");
+        for d in ["/", "/Users", "/Users/me", "/Volumes/OneTeabee"] {
+            assert!(is_broad(Path::new(d), home), "{d} is broad");
+        }
+        for d in ["/Users/me/projects/app", "/Users/me/projects", "/Volumes/OneTeabee/Workspace", "/tmp/x"] {
+            assert!(!is_broad(Path::new(d), home), "{d} is a normal project folder");
+        }
     }
 
     #[test]

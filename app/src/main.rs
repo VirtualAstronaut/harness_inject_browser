@@ -820,6 +820,9 @@ fn cli() -> Option<PathBuf> {
         }
         dir
     });
+    if let Some(dir) = &project {
+        confirm_trust(dir);
+    }
 
     // Already running? Hand over the folder (like `code .`) instead of failing.
     if let Ok(mut conn) = UnixStream::connect(socket_path()) {
@@ -851,6 +854,38 @@ fn cli() -> Option<PathBuf> {
     }
     first_run_setup();
     project
+}
+
+/// `harness-bridge FOLDER` on a folder that isn't trusted yet: ask in the terminal first,
+/// with a stricter prompt for very broad folders. Exits if the answer is no, or if there
+/// is no terminal to ask in (a script can't trust a new folder silently).
+fn confirm_trust(dir: &Path) {
+    if auto_approve() || TrustStore::load(&trust_path()).is_trusted(dir) {
+        return;
+    }
+    if !setup::interactive() {
+        eprintln!(
+            "harness-bridge: {} is not trusted yet. Run `harness-bridge .` there in a terminal to confirm it.",
+            dir.display()
+        );
+        std::process::exit(1);
+    }
+    println!("Use this folder as the project?\n  {}", dir.display());
+    println!("The model will be able to run commands and edit files in it (inside the sandbox).");
+    println!("It stays trusted until you remove it from trusted.json (menu bar → Trusted folders…).\n");
+    let (mut input, mut out) = (std::io::stdin().lock(), std::io::stdout());
+    let ok = if trust::is_broad(dir, &home()) {
+        println!("⚠️  This is your home folder, a folder above it, a whole drive or the disk root.");
+        println!("   Trusting it lets the model work almost anywhere. A project folder is safer.");
+        setup::ask_exact(&mut input, &mut out, "Trust it anyway?", "yes")
+    } else {
+        setup::ask_yes(&mut input, &mut out, "Trust this folder?", false)
+    };
+    if !ok {
+        println!("Not trusted. Nothing changed.");
+        std::process::exit(1);
+    }
+    println!();
 }
 
 /// First start with no browser connected: offer to run setup, once per Mac user,
