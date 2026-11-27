@@ -5,8 +5,10 @@ import { checker, esc, makePage, report } from './harness.mjs';
 
 const { log, ok } = checker();
 
+// The project the fake app reports; the test switches it mid-run (`harness-bridge OTHER`).
+const proj = { path: '/Users/me/proj', name: 'proj' };
 const reply = (p, { calls, emitProgress }) => {
-  if (p.type === 'ping') return { type: 'pong', approval: 'auto', sandbox: true, auto_accept_edits: false, project: '/Users/me/proj', project_name: 'proj' };
+  if (p.type === 'ping') return { type: 'pong', approval: 'auto', sandbox: true, auto_accept_edits: false, project: proj.path, project_name: proj.name };
   if (p.type === 'trust') return { type: 'trusted', added: p.paths, errors: [] };
   if (p.id === 'c1') {
     if (!p.trust_once && !calls.some((c) => c.type === 'trust')) return { type: 'result', id: 'c1', status: 'needs_trust', paths: ['/Users/me/other'] };
@@ -83,6 +85,9 @@ ok(card().querySelector('.d-add')?.textContent.includes('port = 8080') && card()
 clickCard('Apply');
 
 ok(await waitFor(() => card()?.classList.contains('on') && card().textContent.includes('sandbox blocked')), 'sandbox-blocked card');
+// The user switches project in Terminal before the batch finishes.
+proj.path = '/Users/me/other-proj';
+proj.name = 'other-proj';
 clickCard('Retry with network');
 ok(await waitFor(() => calls.some((c) => c.id === 'c3' && c.network && c.approved)), 'retry sent with network');
 
@@ -92,6 +97,8 @@ ok(res.startsWith('[harness-bridge] results') && (res.match(/```local-result/g) 
 ok(res.includes('b.txt') && res.includes('updated src/app.js') && res.includes('added 1 package'), 'results contain all three outputs');
 ok(notifies.at(-1)?.kind === 'notify-clear', 'notification cleared after the last prompt');
 ok(!res.includes('[harness-bridge protocol]'), 'instructions not added to later messages');
+ok(res.startsWith('[harness-bridge] results:\n\nProject folder: /Users/me/other-proj\n'), 'results start with the current project folder (after a switch)');
+ok(await waitFor(() => panel().textContent.includes('📁 other-proj') && panel().textContent.includes('/Users/me/other-proj · the model is told')), 'panel shows the switched project and its full path');
 
 pg.close();
 process.exit(report(log) ? 0 : 1);

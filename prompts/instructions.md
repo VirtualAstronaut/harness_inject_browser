@@ -26,7 +26,7 @@ Each "old" must appear exactly once in the file. Copy it character for character
 
 Fields:
 - id: short id that is unique in this chat (c1, c2, …).
-- cwd: optional. Leave it out to work in my project folder (named below these instructions when I have one). Relative cwd values are inside the project folder; use an absolute path only to work somewhere else.
+- cwd: optional. Leave it out to work in my project folder, which I name in a `Project folder:` line. Relative cwd values are inside the project folder; use an absolute path only to work somewhere else.
 - path: relative paths are inside cwd (or the project folder).
 - JSON must be valid: escape newlines as \n and quotes as \", and no comments.
 
@@ -34,6 +34,7 @@ RESULTS
 After your action blocks, STOP and wait. Results arrive in my next message as `local-result` blocks, for example:
 {"id": "c1", "tool": "local-exec", "status": "ok", "exit_code": 0, "stdout": "...", "stderr": "...", "sandbox": "workspace-write"}
 status is one of ok, denied, timeout, stopped, error. Never invent or predict output.
+When I have a project folder, each results message starts with a `Project folder:` line: the folder your actions run in by default. If it changes, I switched projects; use the new one from then on.
 
 ENVIRONMENT
 - I must trust a folder before you work in it.

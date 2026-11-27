@@ -154,6 +154,43 @@
     render();
   }
 
+  // The Ping button: same check, but always shows that something happened, since a
+  // green dot that stays green looks like nothing was done.
+  async function pingClicked() {
+    state.note = 'Checking the connection…';
+    render();
+    await ping();
+    if (state.bridge !== 'ok' || state.note) return;
+    const msg = `✓ Connected to Harness Bridge${state.info.version ? ` ${state.info.version}` : ''}`;
+    state.note = msg;
+    render();
+    setTimeout(() => {
+      if (state.note === msg) {
+        state.note = '';
+        render();
+      }
+    }, 4000);
+  }
+
+  // Re-read the app's settings and project without touching the note (the user may
+  // have run `harness-bridge OTHER_FOLDER` in Terminal since the last ping).
+  async function refreshInfo() {
+    const r = await bridge({ type: 'ping' });
+    if (r.type === 'pong' && r.status !== 'error') {
+      state.bridge = 'ok';
+      state.info = r;
+    }
+    render();
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && !state.busy) refreshInfo();
+  });
+
+  // The folder `harness-bridge FOLDER` was started in. It goes with the instructions and
+  // at the top of every results message, so copied instructions (Gems, Custom GPTs,
+  // Claude Projects) and project switches stay correct.
+  const projectLine = () => (state.info.project ? `Project folder: ${state.info.project}` : '');
+
   // Live output from the native host.
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg?.kind !== 'progress' || !state.running || state.running.id !== msg.id) return;
@@ -318,7 +355,8 @@
         return '```local-result\n' + JSON.stringify(clean, null, 2) + '\n```';
       })
       .join('\n\n');
-    return `${RESULT_MARK}:\n\n${body}`;
+    const project = projectLine();
+    return `${RESULT_MARK}:\n\n${project ? `${project}\n\n` : ''}${body}`;
   }
 
   // Ask the user (overlay panel) about a pending request; loops until it runs or is refused.
@@ -427,6 +465,7 @@
         setStatus(b, describe(r));
         results.push({ ...r, id: b.req.id, tool: b.req.tool });
       }
+      await refreshInfo(); // current project folder for the results header
       await deliver(formatResults(results));
     } finally {
       state.running = null;
@@ -526,8 +565,8 @@
     }
     // Tell the model which folder it's in, so it can leave out "cwd".
     await ping();
-    const project = state.info.project
-      ? `\n\nProject folder: ${state.info.project}\nActions run there by default: leave out "cwd", and use paths relative to it.`
+    const project = projectLine()
+      ? `\n\n${projectLine()}\nActions run there by default: leave out "cwd", and use paths relative to it.`
       : '';
     const block = `${text}${project}\n\n---\n\n`;
     const ok = await putText(input, current ? `${block}${current}` : block, PROTOCOL_MARK, { replace: true });
@@ -539,7 +578,7 @@
     const text = await getProtocol();
     try {
       await navigator.clipboard.writeText(text);
-      state.note = 'Instructions copied.';
+      state.note = 'Instructions copied. The project folder is added to every result, so they work in any project.';
     } catch {
       state.note = 'Copy failed; open prompts/instructions.md instead.';
     }
@@ -659,6 +698,7 @@
     button{font:inherit;cursor:pointer;background:#2f3136;color:#ececec;border:1px solid #4a4d52;border-radius:7px;padding:2px 8px}
     button:hover{background:#3a3d42}
     .note{color:#f3b469}
+    .note.ok{color:#7ee787}
     .modeline{color:#9ecbff;font-size:12px}
     .project{color:#e6e6e6;font-size:12px;font-weight:600;word-break:break-all}
     .diag{color:#8a8f98;font-size:11px}
@@ -725,6 +765,7 @@
         mode: el('span', { className: 'mode' }),
         modeLine: el('div', { className: 'modeline' }),
         project: el('div', { className: 'project' }),
+        projectPath: el('div', { className: 'diag' }),
         note: el('div', { className: 'note' }),
         diag: el('div', { className: 'diag' }),
         autoRun: el('input', { type: 'checkbox' }),
@@ -743,7 +784,7 @@
         shown: null,
       };
       const pingBtn = el('button', { textContent: 'Ping' });
-      pingBtn.addEventListener('click', trusted(ping));
+      pingBtn.addEventListener('click', trusted(pingClicked));
       for (const k of ['autoRun', 'autoSend']) {
         pill[k].onchange = () => ((state.settings[k] = pill[k].checked), saveSettings());
       }
@@ -762,6 +803,7 @@
       pill.panel.append(
         el('div', { className: 'row' }, pill.dot, el('b', { textContent: `Harness Bridge · ${SITE.name}` }), pill.mode, pingBtn),
         pill.project,
+        pill.projectPath,
         pill.modeLine,
         el(
           'div',
@@ -793,12 +835,18 @@
     pill.modeLine.textContent = modeName
       ? `Mode: ${modeName} · Sandbox ${i.sandbox ? 'on' : 'OFF'} · Edits: ${i.auto_accept_edits ? 'auto-accept' : 'review'}`
       : '';
-    pill.project.textContent = i.project ? `📁 ${i.project_name || i.project}` : state.bridge === 'ok' ? 'No project — run: harness-bridge <folder>' : '';
+    pill.project.textContent = i.project
+      ? `📁 ${i.project_name || i.project}`
+      : state.bridge === 'ok'
+        ? 'No project folder. In Terminal: cd your-project && harness-bridge .'
+        : '';
     pill.project.title = i.project || '';
+    pill.projectPath.textContent = i.project ? `${i.project} · the model is told this folder with every result` : '';
     for (const k of ['autoRun', 'autoSend']) pill[k].checked = state.settings[k];
     const dg = state.diag || {};
     pill.diag.textContent = `Seen on page: ${dg.blocks ?? 0} action block${dg.blocks === 1 ? '' : 's'} · chat box ${dg.input ? '✓' : '✗'} · send button ${dg.send ? '✓' : '✗'}${dg.generating ? ' · generating' : ''}`;
     pill.note.textContent = state.bridge === 'down' && !state.note ? 'Bridge app/host not reachable.' : state.note;
+    pill.note.classList.toggle('ok', pill.note.textContent.startsWith('✓'));
 
     const a = approvals[0];
     pill.card.classList.toggle('on', !!a);

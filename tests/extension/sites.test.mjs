@@ -80,7 +80,11 @@ async function runSite(key, S) {
   await waitFor(() => panel()?.textContent.includes('📁 my-app'), 2000);
   ok(panel()?.textContent.includes(`Harness Bridge · ${S.name}`), 'panel loaded with site name');
   ok(panel()?.textContent.includes('📁 my-app'), 'panel shows the project name');
+  ok(panel()?.textContent.includes('/Users/me/projects/my-app · the model is told this folder with every result'), 'panel shows the full path and that the model gets it');
   ok(/Seen on page: 0 action blocks · chat box ✓ · send button ✓/.test(panel()?.textContent), 'diagnostics: chat box + send button found');
+
+  click(button('Ping'));
+  ok(await waitFor(() => panel()?.querySelector('.note.ok')?.textContent === '✓ Connected to Harness Bridge', 1000), 'Ping shows a visible confirmation');
 
   input.textContent = 'list my files';
   ok(!enter(input).defaultPrevented, 'Enter is not intercepted (nothing added automatically)');
@@ -106,6 +110,7 @@ async function runSite(key, S) {
   click(button('Apply', card()));
   ok(await waitFor(() => sent.length === 2), 'results sent back');
   ok((sent[1] || '').startsWith('[harness-bridge] results') && (sent[1].match(/```local-result/g) || []).length === 2 && sent[1].includes('updated src/app.js'), 'two local-result blocks with outputs');
+  ok((sent[1] || '').includes('\n\nProject folder: /Users/me/projects/my-app\n\n```local-result'), 'results name the project folder above the blocks');
   ok(/"redacted": 1/.test(sent[1] || '') && (sent[1] || '').includes('[REDACTED:openai-key]'), 'masked count passed to the model');
   pg.close();
   return log;

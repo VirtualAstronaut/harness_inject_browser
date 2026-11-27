@@ -58,7 +58,7 @@ You need macOS, [Homebrew](https://brew.sh) and a Chrome-family browser (Chrome,
 5. Open a new chat in Gemini, ChatGPT or Claude. A green dot in the bottom-right panel means the app is connected.
 6. Click **Add instructions** in the panel. Type your request below the instructions and press Send. Do this once per chat.
 
-To keep the instructions in a Gemini Gem, a Custom GPT or a Claude Project, click **Copy instructions** and paste them there.
+To keep the instructions in a Gemini Gem, a Custom GPT or a Claude Project, click **Copy instructions** and paste them there. The copied text doesn't name a folder; the model learns the project folder from each results message.
 
 To update, run `brew upgrade harness-bridge`. You don't need to run `setup` or reload the extension again.
 
@@ -89,9 +89,10 @@ To update, run `brew upgrade harness-bridge`. You don't need to run `setup` or r
 
 - The folder becomes trusted, and stays trusted.
 - Actions run there unless they name another folder.
-- The panel and menu bar show its name.
+- The panel and menu bar show its name. The panel also shows its full path.
+- The model is told the folder in a `Project folder:` line. The line goes below the instructions when you click **Add instructions**, and at the top of every results message. Copied instructions in a Gem, Custom GPT or Claude Project therefore work in any project.
 
-If the app is already running, `harness-bridge OTHER_FOLDER` switches it to that folder.
+If the app is already running, `harness-bridge OTHER_FOLDER` switches it to that folder. The panel updates when you return to the chat tab, and the next results tell the model the new folder.
 
 `harness-bridge` with no folder starts without a project. Actions then start in your home folder.
 
