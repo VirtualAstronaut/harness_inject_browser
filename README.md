@@ -26,8 +26,11 @@ You need macOS, [Homebrew](https://brew.sh) and a Chrome-family browser (Chrome,
 
    ```sh
    brew tap virtualastronaut/harness-bridge https://github.com/VirtualAstronaut/harness_inject_browser
+   brew trust --formula virtualastronaut/harness-bridge/harness-bridge
    brew install harness-bridge
    ```
+
+   Homebrew only installs formulas from other people's taps after you trust them. The `brew trust` line trusts this one formula, not the whole tap.
 
    Homebrew builds the app on your Mac, so the first install takes a few minutes. Because it is built locally, macOS does not show an "app is not verified" warning.
 2. Connect your browsers to the app:

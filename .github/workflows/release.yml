@@ -8,6 +8,9 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  # "Run workflow" in the Actions tab: skips the formula update and only
+  # test-installs the formula currently on main.
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -23,6 +26,7 @@ defaults:
 
 jobs:
   formula:
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -59,12 +63,16 @@ jobs:
 
   install-test:
     needs: formula
+    # Run after a successful formula update, or on its own when started by hand.
+    if: ${{ !cancelled() && (needs.formula.result == 'success' || needs.formula.result == 'skipped') }}
     runs-on: macos-latest
     steps:
-      - name: Tap this repository
+      - name: Tap and trust this repository's formula
         run: |
           owner=$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
           brew tap "$owner/harness-bridge" "https://github.com/$GITHUB_REPOSITORY"
+          # Homebrew refuses formulae from third-party taps until they are trusted.
+          brew trust --formula "$owner/harness-bridge/harness-bridge"
 
       - name: Install from source
         run: brew install --build-from-source harness-bridge
