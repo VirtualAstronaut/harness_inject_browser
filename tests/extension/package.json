@@ -1,0 +1,11 @@
+{
+  "name": "harness-bridge-extension-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node sites.test.mjs && node flow.test.mjs"
+  },
+  "devDependencies": {
+    "jsdom": "24.1.3"
+  }
+}

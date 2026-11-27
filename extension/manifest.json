@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "Harness Bridge",
+  "version": "0.3.0",
+  "description": "Lets Gemini, ChatGPT and Claude run sandboxed commands and edit files on this Mac, with your approval.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsprrQXBCkhqq60T3oMdTJKPUescqviC54D1MP79qNqA0+Jnkyyz612TLFnw7HnaG7iwWbiGnUSIrn4Lz1X3ASKMHL4lR4YjGPHzHosmrDormOPv5nmtFKGBhcAG+aS+orEzRuOnUCOWHm3xZGyv1kLMl3T5niFBvk7YKjug/l9BONF0kltRifv5bZciVNEc61HuYgpNTQLo5l2tTwK4iW4LIAebV0r7cVLWgqstVvTTUl0+5/waqDEnoouf2X4IvIyBlL9dgPPRDhDEfxnl7OJeCGUiasWqP1/RKGIjF/ibStkjQ5Zrj4vwEb0M+tCh051ksqgt/dRVkPaa0NKGCRwIDAQAB",
+  "permissions": [
+    "nativeMessaging",
+    "storage",
+    "notifications"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://gemini.google.com/*",
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*",
+        "https://claude.ai/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "Harness Bridge"
+  },
+  "icons": {
+    "128": "icon128.png"
+  }
+}

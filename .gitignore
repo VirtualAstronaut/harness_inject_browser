@@ -1,0 +1,6 @@
+app/target/
+app/gen/
+.dev/
+*.pem
+.DS_Store
+node_modules/
